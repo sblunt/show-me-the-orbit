@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Show Me the Orbit</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      height: 100vh;
+      font-family: system-ui, sans-serif;
+      overflow: hidden;
+    }
+
+    #app {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      height: 100vh;
+    }
+
+    /* ── Left column ── */
+    #plots {
+      background: #ffffff;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #orbit-plot {
+      height: calc(100vh - 236px); /* 20+20 pad + 16 gap + 180 rv */
+      aspect-ratio: 1 / 1;
+      max-width: 100%;
+      flex-shrink: 0;
+    }
+
+    #rv-plot {
+      height: 180px;
+      width: 100%;
+      flex-shrink: 0;
+    }
+
+    /* ── Right column (sidebar) ── */
+    #sidebar {
+      background: #1a1a2e;
+      padding: 24px;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    #sidebar h1 {
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: normal;
+      margin-top: 0;
+      margin-bottom: 4px;
+      line-height: 1.3;
+    }
+
+    .subtitle {
+      color: #8899aa;
+      font-size: 11px;
+      margin-top: 0;
+      margin-bottom: 28px;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid #2a3a5a;
+      margin-bottom: 24px;
+    }
+
+    hr.tight { margin-bottom: 4px; }
+
+    /* ── Sliders ── */
+    .slider-row { margin-bottom: 28px; }
+
+    .slider-label {
+      color: #da70d6;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      display: block;
+      margin-bottom: 10px;
+    }
+
+    .slider-wrap { position: relative; }
+
+    input[type="range"] {
+      width: 100%;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: #3a4a6a;
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #da70d6;
+      border: 2px solid #ffffff;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #da70d6;
+      border: 2px solid #ffffff;
+      cursor: pointer;
+      border: none;
+      border: 2px solid #ffffff;
+    }
+
+    .slider-marks {
+      position: relative;
+      height: 18px;
+      margin-top: 4px;
+    }
+
+    .slider-marks span {
+      position: absolute;
+      color: #8899aa;
+      font-size: 10px;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .slider-marks span:first-child { transform: translateX(0); }
+    .slider-marks span:last-child  { transform: translateX(-100%); }
+
+    .slider-tooltip {
+      position: absolute;
+      top: -28px;
+      background: #2a3a5a;
+      color: #ffffff;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 3px;
+      pointer-events: none;
+      white-space: nowrap;
+      transform: translateX(-50%);
+      display: none;
+      z-index: 10;
+    }
+
+    .slider-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 4px solid transparent;
+      border-top-color: #2a3a5a;
+    }
+
+    /* ── Info sections ── */
+    .info-heading {
+      color: #da70d6;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      margin-top: 20px;
+    }
+
+    .info-body {
+      color: #8899aa;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .info-body ul {
+      padding-left: 18px;
+      margin-top: 4px;
+      margin-bottom: 0;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Left: plots ── -->
+  <div id="plots">
+    <div id="orbit-plot"></div>
+    <div id="rv-plot"></div>
+  </div>
+
+  <!-- ── Right: dark sidebar ── -->
+  <div id="sidebar">
+    <h1>Show Me the Orbit</h1>
+    <p class="subtitle">Sarah Blunt (2019; web port 2026)</p>
+    <hr>
+
+    <!-- e slider -->
+    <div class="slider-row">
+      <label class="slider-label" for="ecc-slider">e — eccentricity</label>
+      <div class="slider-wrap">
+        <div class="slider-tooltip" id="ecc-tooltip"></div>
+        <input type="range" id="ecc-slider" min="0" max="0.95" step="0.05" value="0">
+        <div class="slider-marks">
+          <span style="left:0%">0</span>
+          <span style="left:52.63%">0.5</span>
+          <span style="left:100%">0.95</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- i slider -->
+    <div class="slider-row">
+      <label class="slider-label" for="inc-slider">i — inclination (°)</label>
+      <div class="slider-wrap">
+        <div class="slider-tooltip" id="inc-tooltip"></div>
+        <input type="range" id="inc-slider" min="0" max="180" step="10" value="0">
+        <div class="slider-marks">
+          <span style="left:0%">0</span>
+          <span style="left:50%">90</span>
+          <span style="left:100%">180</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ω slider -->
+    <div class="slider-row">
+      <label class="slider-label" for="aop-slider">ω — arg. of periastron (°)</label>
+      <div class="slider-wrap">
+        <div class="slider-tooltip" id="aop-tooltip"></div>
+        <input type="range" id="aop-slider" min="0" max="360" step="10" value="0">
+        <div class="slider-marks">
+          <span style="left:0%">0</span>
+          <span style="left:50%">180</span>
+          <span style="left:100%">360</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ω slider -->
+    <div class="slider-row">
+      <label class="slider-label" for="pan-slider">Ω — pos. angle of nodes (°)</label>
+      <div class="slider-wrap">
+        <div class="slider-tooltip" id="pan-tooltip"></div>
+        <input type="range" id="pan-slider" min="0" max="360" step="10" value="0">
+        <div class="slider-marks">
+          <span style="left:0%">0</span>
+          <span style="left:50%">180</span>
+          <span style="left:100%">360</span>
+        </div>
+      </div>
+    </div>
+
+    <hr class="tight">
+
+    <!-- Info text -->
+    <div>
+      <p class="info-heading">The Orbital Elements in Words</p>
+      <div class="info-body">
+        <ul>
+          <li><b>ω</b> is the argument of periastron. This parameter rotates the vector connecting the star and the planet's periastron <b>within the orbital plane</b>.</li>
+          <li><b>Ω</b> is the position angle of nodes. This parameter rotates the line of nodes within the plane of the sky.</li>
+          <li><b>i</b> is the orbit's inclination. This parameter rotates the orbital plane about its line of nodes (dashed black line in top panel).</li>
+          <li><b>e</b> is the orbit's eccentricity. This parameter controls the orbit's shape and the planet's speed over time.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div>
+      <p class="info-heading">Symbol and Color Definitions</p>
+      <div class="info-body">
+        <ul>
+          <li>The pink circle tracks the planet's position, and the pink star shows the primary's location. The top panel is shown in the reference frame where the star is stationary. In other words, the orbital track plotted shows the <b>relative RA and Dec</b> of the planet and star over time.</li>
+          <li>The darker portion of the orbital arc is in front of the plane of the sky (closer to Earth), and the lighter portion is behind the plane of the sky (farther from Earth). When the planet symbol becomes transparent, the planet is behind the plane of the sky.</li>
+          <li>The black dashed line in the top panel is the line of nodes, or the line in the plane of the sky that intersects the orbit.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div>
+      <p class="info-heading">A Caution to RV Astronomers</p>
+      <div class="info-body">
+        <ul>
+          <li>orbitize! defines ω to be the argument of periastron of the <b>planet's</b> orbit, whereas most RV codes (e.g. radvel) define ω to be the argument of periastron of the <b>star's</b> orbit. In practice, this means that you need to add 180° to ω when comparing the outputs of RV codes and orbitize!.</li>
+        </ul>
+      </div>
+    </div>
+  </div><!-- /sidebar -->
+</div><!-- /app -->
+
+<script>
+// ── Constants ──────────────────────────────────────────────
+const SMA     = 10;
+const TAU     = 0.3;
+const PLX     = 30;
+const MTOT    = 1.3;
+const MPLANET = 0.01;
+const N       = 500;
+const MAX_ECC = 0.95;
+
+const per_yr  = Math.sqrt(SMA**3 / MTOT);
+const max_sep = SMA * (1 + MAX_ECC) * PLX;
+
+// RV semi-amplitude ceiling (i=90°, ecc=MAX_ECC); 1 AU/yr = 4.74047 km/s
+const maxK = 2 * Math.PI * 4.74047 * MPLANET /
+             (Math.sqrt(MTOT * SMA) * Math.sqrt(1 - MAX_ECC**2));
+
+// Pre-built epoch array [yr]
+const epochs_yr = Array.from({length: N}, (_, i) => (i / (N - 1)) * per_yr);
+
+// Trace indices — orbit figure
+const IO_BACK = 0, IO_FRONT = 1, IO_NODES = 2, IO_STAR = 3, IO_PLANET = 4;
+// Trace indices — RV figure
+const IR_TRACK = 0, IR_ZERO = 1, IR_PLANET = 2;
+
+const PURPLE       = 'rgba(128,0,128,1.0)';
+const PURPLE_FADED = 'rgba(128,0,128,0.12)';
+
+// ── Orbital computation ────────────────────────────────────
+function computeOrbit(ecc, inc_deg, aop_deg, pan_deg) {
+  const inc = inc_deg * Math.PI / 180;
+  const aop = aop_deg * Math.PI / 180;
+  const pan = pan_deg * Math.PI / 180;
+
+  const ca = Math.cos(aop), sa = Math.sin(aop);
+  const cp = Math.cos(pan), sp = Math.sin(pan);
+  const ci = Math.cos(inc), si = Math.sin(inc);
+
+  // Thiele-Innes constants (sky-plane projection)
+  const TI_A =  ca*cp - sa*sp*ci;
+  const TI_B =  ca*sp + sa*cp*ci;
+  const TI_F = -sa*cp - ca*sp*ci;
+  const TI_G = -sa*sp + ca*cp*ci;
+
+  const sqrt1e2 = Math.sqrt(1 - ecc*ecc);
+  // stellar RV semi-amplitude [km/s]; sign flip baked in (planet aop convention)
+  const K = 2*Math.PI * 4.74047 * MPLANET * si / (Math.sqrt(MTOT * SMA) * sqrt1e2);
+
+  const ra = new Array(N), dec = new Array(N);
+  const rv = new Array(N), z   = new Array(N);
+
+  for (let i = 0; i < N; i++) {
+    const t_yr = (i / (N - 1)) * per_yr;
+
+    // Mean anomaly, wrapped to [0, 2π]
+    let phase = (t_yr / per_yr - TAU) % 1.0;
+    if (phase < 0) phase += 1.0;
+    const M = 2 * Math.PI * phase;
+
+    // Eccentric anomaly via Newton-Raphson
+    let E = M;
+    for (let it = 0; it < 50; it++) {
+      const dE = (M - E + ecc * Math.sin(E)) / (1 - ecc * Math.cos(E));
+      E += dE;
+      if (Math.abs(dE) < 1e-10) break;
+    }
+
+    const cosE = Math.cos(E), sinE = Math.sin(E);
+
+    // Position in orbital plane
+    const X = SMA * (cosE - ecc);
+    const Y = SMA * sqrt1e2 * sinE;
+
+    // Sky coordinates [mas]
+    ra[i]  = PLX * (TI_B * X + TI_G * Y);
+    dec[i] = PLX * (TI_A * X + TI_F * Y);
+
+    // Stellar RV [km/s] (sign flip from planet aop convention)
+    const nu = Math.atan2(sqrt1e2 * sinE, cosE - ecc);
+    rv[i] = -K * (Math.cos(nu + aop) + ecc * Math.cos(aop));
+
+    // z-depth via base orbit (aop0=pan0=0 → ra0=PLX·Y, dec0=PLX·X)
+    z[i] = si * (-ca * PLX * Y - sa * PLX * X) * PLX;
+  }
+
+  return { ra, dec, rv, z };
+}
+
+// ── Figure builders ────────────────────────────────────────
+function orbitTraces(ra, dec, z, pan_deg, idx) {
+  const pan = pan_deg * Math.PI / 180;
+  const front_ra  = ra.map( (r, i) => z[i] >= 0 ? r : null);
+  const front_dec = dec.map((d, i) => z[i] >= 0 ? d : null);
+  const back_ra   = ra.map( (r, i) => z[i] <  0 ? r : null);
+  const back_dec  = dec.map((d, i) => z[i] <  0 ? d : null);
+  const lon_x = [-Math.sin(pan)*max_sep,  Math.sin(pan)*max_sep];
+  const lon_y = [-Math.cos(pan)*max_sep,  Math.cos(pan)*max_sep];
+  const op = z[idx] >= 0 ? 1.0 : 0.15;
+
+  return [
+    // IO_BACK
+    { x: back_ra,  y: back_dec,  mode: 'lines',
+      line: { color: PURPLE_FADED, width: 2 }, showlegend: false, hoverinfo: 'skip' },
+    // IO_FRONT
+    { x: front_ra, y: front_dec, mode: 'lines',
+      line: { color: PURPLE, width: 2 }, showlegend: false, hoverinfo: 'skip' },
+    // IO_NODES
+    { x: lon_x,    y: lon_y,     mode: 'lines',
+      line: { color: '#555555', dash: 'dash', width: 1.5 }, showlegend: false, hoverinfo: 'skip' },
+    // IO_STAR
+    { x: [0], y: [0], mode: 'markers',
+      marker: { symbol: 'star', size: 18, color: 'violet', line: { color: 'black', width: 1 } },
+      showlegend: false, hoverinfo: 'skip' },
+    // IO_PLANET
+    { x: [ra[idx]],  y: [dec[idx]], mode: 'markers',
+      marker: { size: 10, color: 'violet', opacity: op, line: { color: 'black', width: 1 } },
+      showlegend: false, hoverinfo: 'skip' },
+  ];
+}
+
+function orbitLayout() {
+  return {
+    paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff',
+    font: { color: '#333333', size: 13, family: 'system-ui, sans-serif' },
+    margin: { t: 20, b: 55, l: 70, r: 20 },
+    xaxis: {
+      title: 'ΔRA [mas]',
+      range: [1.1*max_sep, -1.1*max_sep],
+      gridcolor: '#e8e8e8', zerolinecolor: '#bbbbbb',
+    },
+    yaxis: {
+      title: 'ΔDec [mas]',
+      range: [-1.1*max_sep, 1.1*max_sep],
+      gridcolor: '#e8e8e8', zerolinecolor: '#bbbbbb',
+      scaleanchor: 'x', scaleratio: 1,
+    },
+  };
+}
+
+function rvTraces(rv, idx) {
+  return [
+    // IR_TRACK
+    { x: epochs_yr, y: rv, mode: 'lines',
+      line: { color: 'purple', width: 2 }, showlegend: false, hoverinfo: 'skip' },
+    // IR_ZERO
+    { x: [0, per_yr], y: [0, 0], mode: 'lines',
+      line: { color: '#aaaaaa', dash: 'dash', width: 1 }, showlegend: false, hoverinfo: 'skip' },
+    // IR_PLANET
+    { x: [epochs_yr[idx]], y: [rv[idx]], mode: 'markers',
+      marker: { size: 10, color: 'violet', line: { color: 'black', width: 1 } },
+      showlegend: false, hoverinfo: 'skip' },
+  ];
+}
+
+function rvLayout() {
+  return {
+    paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff',
+    font: { color: '#333333', size: 13, family: 'system-ui, sans-serif' },
+    margin: { t: 30, b: 55, l: 70, r: 20 },
+    xaxis: {
+      title: 'time [yr]',
+      range: [0, per_yr],
+      gridcolor: '#e8e8e8', zerolinecolor: '#bbbbbb',
+    },
+    yaxis: {
+      title: 'Stellar RV [km s⁻¹]',
+      range: [-1.5*maxK, 1.5*maxK],
+      gridcolor: '#e8e8e8', zerolinecolor: '#bbbbbb',
+    },
+  };
+}
+
+// ── State ──────────────────────────────────────────────────
+let animIdx    = 0;
+let orbitCache = computeOrbit(0, 0, 0, 0);
+
+// ── Init plots ─────────────────────────────────────────────
+const cfg = { displayModeBar: false, responsive: true };
+
+Plotly.newPlot('orbit-plot',
+  orbitTraces(orbitCache.ra, orbitCache.dec, orbitCache.z, 0, 0),
+  orbitLayout(), cfg);
+
+Plotly.newPlot('rv-plot',
+  rvTraces(orbitCache.rv, 0),
+  rvLayout(), cfg);
+
+// ── Slider → recompute + restyle ──────────────────────────
+function onSliderChange() {
+  const ecc = parseFloat(document.getElementById('ecc-slider').value);
+  const inc = parseFloat(document.getElementById('inc-slider').value);
+  const aop = parseFloat(document.getElementById('aop-slider').value);
+  const pan = parseFloat(document.getElementById('pan-slider').value);
+
+  orbitCache = computeOrbit(ecc, inc, aop, pan);
+  const { ra, dec, rv, z } = orbitCache;
+  const idx     = animIdx;
+  const pan_rad = pan * Math.PI / 180;
+
+  const front_ra  = ra.map( (r, i) => z[i] >= 0 ? r : null);
+  const front_dec = dec.map((d, i) => z[i] >= 0 ? d : null);
+  const back_ra   = ra.map( (r, i) => z[i] <  0 ? r : null);
+  const back_dec  = dec.map((d, i) => z[i] <  0 ? d : null);
+  const lon_x = [-Math.sin(pan_rad)*max_sep,  Math.sin(pan_rad)*max_sep];
+  const lon_y = [-Math.cos(pan_rad)*max_sep,  Math.cos(pan_rad)*max_sep];
+  const op = z[idx] >= 0 ? 1.0 : 0.15;
+
+  const od = document.getElementById('orbit-plot');
+  Plotly.restyle(od, { x: [back_ra],  y: [back_dec]  }, [IO_BACK]);
+  Plotly.restyle(od, { x: [front_ra], y: [front_dec] }, [IO_FRONT]);
+  Plotly.restyle(od, { x: [lon_x],    y: [lon_y]     }, [IO_NODES]);
+  Plotly.restyle(od, { x: [[ra[idx]]], y: [[dec[idx]]], 'marker.opacity': [op] }, [IO_PLANET]);
+
+  const rd = document.getElementById('rv-plot');
+  Plotly.restyle(rd, { y: [rv] }, [IR_TRACK]);
+  Plotly.restyle(rd, { x: [[epochs_yr[idx]]], y: [[rv[idx]]] }, [IR_PLANET]);
+}
+
+['ecc-slider', 'inc-slider', 'aop-slider', 'pan-slider'].forEach(id => {
+  document.getElementById(id).addEventListener('input', onSliderChange);
+});
+
+// ── Slider tooltips ────────────────────────────────────────
+const sliderTooltips = [
+  { slider: 'ecc-slider', tip: 'ecc-tooltip', decimals: 2 },
+  { slider: 'inc-slider', tip: 'inc-tooltip', decimals: 0 },
+  { slider: 'aop-slider', tip: 'aop-tooltip', decimals: 0 },
+  { slider: 'pan-slider', tip: 'pan-tooltip', decimals: 0 },
+];
+
+sliderTooltips.forEach(({ slider: sid, tip: tid, decimals }) => {
+  const sl  = document.getElementById(sid);
+  const tip = document.getElementById(tid);
+
+  function positionTip() {
+    const pct   = (sl.value - sl.min) / (sl.max - sl.min);
+    const thumbW = 14;
+    const trackW = sl.offsetWidth;
+    const left   = pct * (trackW - thumbW) + thumbW / 2;
+    tip.style.left    = left + 'px';
+    tip.textContent   = parseFloat(sl.value).toFixed(decimals);
+  }
+
+  function showTip() { positionTip(); tip.style.display = 'block'; }
+  function hideTip() { tip.style.display = 'none'; }
+
+  sl.addEventListener('mouseenter', showTip);
+  sl.addEventListener('mouseleave', () => { if (!sl.matches(':active')) hideTip(); });
+  sl.addEventListener('mousedown',  showTip);
+  sl.addEventListener('mouseup',    () => { if (!sl.matches(':hover')) hideTip(); });
+  sl.addEventListener('input',      positionTip);
+  sl.addEventListener('touchstart', showTip, { passive: true });
+  sl.addEventListener('touchend',   hideTip, { passive: true });
+});
+
+// ── Animation loop (50 ms ≈ 20 fps, matching Dash interval) ──
+setInterval(() => {
+  animIdx = (animIdx + 1) % N;
+  const { ra, dec, rv, z } = orbitCache;
+  const idx      = animIdx;
+  const epoch_yr = epochs_yr[idx];
+  const op       = z[idx] >= 0 ? 1.0 : 0.15;
+
+  Plotly.restyle('orbit-plot', {
+    x: [[ra[idx]]], y: [[dec[idx]]], 'marker.opacity': [op]
+  }, [IO_PLANET]);
+
+  Plotly.restyle('rv-plot', {
+    x: [[epoch_yr]], y: [[rv[idx]]]
+  }, [IR_PLANET]);
+}, 50);
+</script>
+</body>
+</html>
